@@ -202,21 +202,21 @@ app.post('/webhook/tuya-proxy', async (req, res) => {
 
       console.log('[proxy] DPs found:', dps.length, '→', JSON.stringify(dps))
 
-      // ── DP extraction for 单相重合闸_2P_V3_63 (Scale 2 → divide by 100) ──
-      // charge_energy = remaining balance for this meter model
-      // balance_energy = fallback
-      const chargeDp  = dps.find(dp => dp.code === 'charge_energy')
-      const balanceDp = dps.find(dp => dp.code === 'balance_energy')
-      const switchDp  = dps.find(dp => dp.code === 'switch')
-      const prepayDp  = dps.find(dp => dp.code === 'switch_prepayment')
-      const powerDp   = dps.find(dp => ['cur_power','power','active_power'].includes(dp.code))
+      // ── DP extraction — confirmed from Tuya product definition ──────────
+      // DP 13: balance_energy  — Remaining Energy, Scale 2 (value/100 = kWh)
+      // DP 37: balance         — Balance, Scale 2 (fallback)
+      // DP 12: prepayment_switch — Bool
+      const balanceDp  = dps.find(dp => dp.code === 'balance_energy')  // DP 13 (primary)
+      const balance2Dp = dps.find(dp => dp.code === 'balance')          // DP 37 (fallback)
+      const prepayDp   = dps.find(dp => dp.code === 'prepayment_switch')// DP 12
+      const powerDp    = dps.find(dp => ['cur_power','power','active_power'].includes(dp.code))
 
-      const balance_kwh = chargeDp  ? chargeDp.value  / 100
-                        : balanceDp ? balanceDp.value / 100
+      const balance_kwh = balanceDp  ? balanceDp.value  / 100
+                        : balance2Dp ? balance2Dp.value / 100
                         : 0
 
-      console.log('[proxy] charge_energy=' + (chargeDp?.value ?? 'N/A') +
-                  ' balance_energy=' + (balanceDp?.value ?? 'N/A') +
+      console.log('[proxy] balance_energy(DP13)=' + (balanceDp?.value ?? 'N/A') +
+                  ' balance(DP37)=' + (balance2Dp?.value ?? 'N/A') +
                   ' → balance_kwh=' + balance_kwh + ' | online=' + is_online)
 
       return res.json({
@@ -224,7 +224,7 @@ app.post('/webhook/tuya-proxy', async (req, res) => {
         balance_kwh,
         power_w:       powerDp  ? powerDp.value  / 10 : null,
         is_online,
-        is_on:         switchDp ? switchDp.value  : true,
+        is_on:         true,
         is_prepayment: prepayDp ? prepayDp.value  : false,
         raw_dps:       dps,
         endpoints:     endpointResults,
@@ -233,8 +233,9 @@ app.post('/webhook/tuya-proxy', async (req, res) => {
 
     if (action === 'topupDevice') {
       const { token } = await getTuyaToken(clientId, clientSecret)
-      const deviceValue = Math.round(kwhAmount * 100) // Scale 2
-      const body = JSON.stringify({ commands: [{ code: 'charge_energy', value: deviceValue }] })
+      // DP 37 'balance' is the Send+Report DP for topping up (Scale 2 → value * 100)
+      const deviceValue = Math.round(kwhAmount * 100)
+      const body = JSON.stringify({ commands: [{ code: 'balance', value: deviceValue }] })
       console.log('[proxy] topup kWh:', kwhAmount, '→ raw value:', deviceValue)
       const result = await callEndpoint(clientId, clientSecret, token, 'POST', '/v1.0/iot-03/devices/' + deviceId + '/commands', body)
       console.log('[proxy] topup result:', JSON.stringify(result))
