@@ -6,10 +6,10 @@ app.use(express.json())
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
-const TIMEOUT_MS   = 60000   // 60 seconds
-const MAX_RETRIES  = 3
-const RETRY_DELAY  = 2000    // 2 seconds between retries
-const HOSTS = ['openapi.tuyasg.com', 'openapi.tuya.com']  // SG first, global fallback
+const TIMEOUT_MS   = 8000    // 8 seconds — fast now we have the right domain
+const MAX_RETRIES  = 1       // one attempt per host
+const RETRY_DELAY  = 0
+const HOSTS = ['openapi-sg.iotbing.com']  // Tuya Singapore — confirmed from API Explorer
 
 // ─── HTTPS helper with retry + host fallback ─────────────────────────────────
 
@@ -131,7 +131,7 @@ function extractDps(data) {
       const buf = Buffer.from(data.result, 'base64')
       const results = []
       let offset = 0
-      const DP_MAP = { 11: 'switch_prepayment', 12: 'charge_energy', 13: 'balance_energy', 16: 'switch' }
+      const DP_MAP = { 12: 'prepayment_switch', 13: 'balance_energy', 18: 'meter_id', 37: 'balance' }
       while (offset + 4 <= buf.length) {
         const id = buf[offset], type = buf[offset+1], len = buf.readUInt16BE(offset+2)
         if (offset + 4 + len > buf.length) break
